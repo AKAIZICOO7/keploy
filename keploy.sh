@@ -38,23 +38,26 @@ installKeploy (){
     fi
 
     move_keploy_binary() {
+        # Get OS name once
+        OS_NAME=$(uname)
+        
         # Check if NO_ROOT is set to true
         if [ "$NO_ROOT" = "true" ]; then
             # Move without sudo
             target_dir="$HOME/.keploy/bin"
-            source_dir="/tmp/keploy"  # Default source directory
+            
+            # Set consistent source directory for both macOS and Linux
+            if [ "$OS_NAME" = "Darwin" ]; then
+                source_dir="/tmp/keploy/keploy"  # macOS: binary inside extracted folder
+            else
+                source_dir="/tmp/keploy"  # Linux: binary is the extracted file
+            fi
 
             # Create the target directory in the user's home directory
             mkdir -p "$target_dir"
             if [ $? -ne 0 ]; then
                 echo "Error: Failed to create directory $target_dir"
                 exit 1
-            fi
-
-            # Check if the OS is macOS (Darwin) to set the correct source path
-            OS_NAME=$(uname)  # Get the operating system name
-            if [ "$OS_NAME" = "Darwin" ]; then
-                source_dir="/tmp/keploy/keploy"  # Set source directory to the binary inside the extracted folder
             fi
 
             # Move the keploy binary to the user's home directory bin
@@ -76,10 +79,11 @@ installKeploy (){
                 exit 1
             fi
         else
-            source_dir="/tmp/keploy"
-            OS_NAME=$(uname)  # Get the operating system name
+            # Set consistent source directory for both macOS and Linux
             if [ "$OS_NAME" = "Darwin" ]; then
-                source_dir="/tmp/keploy/keploy"  # Set source directory to the binary inside the extracted folder
+                source_dir="/tmp/keploy/keploy"  # macOS: binary inside extracted folder
+            else
+                source_dir="/tmp/keploy"  # Linux: binary is the extracted file
             fi
             sudo mkdir -p /usr/local/bin && sudo mv "$source_dir" /usr/local/bin/keploy
         fi
@@ -96,7 +100,13 @@ installKeploy (){
         # to avoid the "File exists" error
         rm -rf /tmp/keploy
         mkdir -p /tmp/keploy
-        curl --silent --location "$download_url" | tar xz -C /tmp/keploy/
+        
+        # Add error checking for download
+        if ! curl --silent --location "$download_url" | tar xz -C /tmp/keploy/; then
+            echo "Error: Failed to download or extract Keploy from $download_url"
+            exit 1
+        fi
+        
         move_keploy_binary
         delete_keploy_alias
     }
@@ -107,7 +117,13 @@ installKeploy (){
         else
             download_url="https://github.com/keploy/keploy/releases/latest/download/keploy_linux_arm64.tar.gz"
         fi
-        curl --silent --location "$download_url" | tar xz --overwrite -C /tmp 
+        
+        # Add error checking for download
+        if ! curl --silent --location "$download_url" | tar xz --overwrite -C /tmp; then
+            echo "Error: Failed to download or extract Keploy from $download_url"
+            exit 1
+        fi
+        
         move_keploy_binary
     }
 
@@ -118,18 +134,25 @@ installKeploy (){
         else
             download_url="https://github.com/keploy/keploy/releases/latest/download/keploy_linux_amd64.tar.gz"
         fi
-        curl --silent --location "$download_url" | tar xz --overwrite -C /tmp
+        
+        # Add error checking for download
+        if ! curl --silent --location "$download_url" | tar xz --overwrite -C /tmp; then
+            echo "Error: Failed to download or extract Keploy from $download_url"
+            exit 1
+        fi
+        
         move_keploy_binary
     }
 
     append_to_rc() {
-        last_byte=$(tail -c 1 $2)
+        last_byte=$(tail -c 1 "$2")
         if [[ "$last_byte" != "" ]]; then
-            echo -e "\n$1" >> $2
+            echo -e "\n$1" >> "$2"
         else
-            echo "$1" >> $2
+            echo "$1" >> "$2"
         fi
-        source $2
+        # Remove unsafe sourcing - just echo instruction instead
+        echo "Please restart your shell or run: source $2"
     }
 
     update_path() {
@@ -140,7 +163,7 @@ installKeploy (){
                 append_to_rc "$PATH_CMD" "$rc_file"
             fi
         else
-            export PATH="$PATH_CMD"
+            echo "Please add \$HOME/.keploy/bin to your PATH manually"
         fi
     }
 
@@ -164,7 +187,7 @@ installKeploy (){
                     if grep -q "alias keploy=" "$HOME/.zshrc"; then
                         sed -i '/alias keploy/d' "$HOME/.zshrc"
                     fi
-                    append_to_rc "$ALIAS_CMD" ~/.zshrc
+                    append_to_rc "$ALIAS_CMD" "$HOME/.zshrc"
                 else
                     alias keploy="$ALIAS_CMD"
                 fi
@@ -173,7 +196,7 @@ installKeploy (){
                     if grep -q "alias keploy=" "$HOME/.bashrc"; then
                         sed -i '/alias keploy/d' "$HOME/.bashrc"
                     fi
-                    append_to_rc "$ALIAS_CMD" ~/.bashrc
+                    append_to_rc "$ALIAS_CMD" "$HOME/.bashrc"
                 else
                     alias keploy="$ALIAS_CMD"
                 fi
@@ -182,7 +205,7 @@ installKeploy (){
                     if grep -q "alias keploy=" "$HOME/.profile"; then
                         sed -i '/alias keploy/d' "$HOME/.profile"
                     fi
-                    append_to_rc "$ALIAS_CMD" ~/.profile
+                    append_to_rc "$ALIAS_CMD" "$HOME/.profile"
                 else
                     alias keploy="$ALIAS_CMD"
                 fi
